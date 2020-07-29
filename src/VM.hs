@@ -1,4 +1,10 @@
-module VM where
+module VM 
+( VM (..)
+, vmInit 
+, vmExec 
+, vmRun 
+) 
+where
 
 import Data.Char
 import Data.List
@@ -20,13 +26,19 @@ vmInit :: CommandBuffer -> VM
 vmInit =
     VM (repeat 0) 0
 
+vmStep :: VM -> VM 
+vmStep (VM b a cb) = 
+    VM b a (nextCmd cb)
+
 vmAdd :: Int -> VM -> IO VM
 vmAdd n (VM b a cb) =
-    return $ VM (doAt (+n) a b) a (nextCmd cb)
+    return . vmStep $ VM addToBus a cb
+    where 
+        addToBus = doAt (+n) a b
 
 vmSeek :: Int -> VM -> IO VM
 vmSeek n (VM b a cb) =
-    return $ VM b (a + n) (nextCmd cb)
+    return . vmStep $ VM b (a + n) cb
 
 vmJump :: Int -> VM -> IO VM
 vmJump l (VM b a cb) =
@@ -48,18 +60,21 @@ vmBreak l (VM b a cb) =
             Nothing ->
                 VM b a (nextCmd cb)
 
+-- TODO: Buffer the print statements
 vmPrint :: VM -> IO VM
 vmPrint (VM b a cb) = do
-    putChar $ chr $ b !! a
+    putChar . chr $ b !! a
     return (VM b a (nextCmd cb))
 
 vmScan :: VM -> IO VM
 vmScan (VM b a cb) = do
     c <- getChar 
-    return $ VM (doAt (const $ ord c) a b) a (nextCmd cb)
+    return . vmStep $ VM (writeBus c) a cb
+    where 
+        writeBus c = doAt (const $ ord c) a b
 
-exec :: VM -> IO VM
-exec vm =
+vmExec :: VM -> IO VM
+vmExec vm =
     let (VM bus addr cmdBuf) = vm in
         case getCmd cmdBuf of
             Add n ->
@@ -70,7 +85,7 @@ exec vm =
                 if bus !! addr /= 0 then 
                     vmJump l vm
                 else 
-                    return $ VM bus addr (nextCmd cmdBuf)
+                    return $ vmStep vm
             Print ->
                 vmPrint vm
             Scan ->
@@ -79,11 +94,11 @@ exec vm =
                 if bus !! addr == 0 then 
                     vmBreak l vm 
                 else
-                    return $ VM bus addr (nextCmd cmdBuf)
+                    return $ vmStep vm
 
 vmRun :: VM -> IO ()
 vmRun vm = do
-    vm' <- exec vm
+    vm' <- vmExec vm
     if (cmdPtr vm') < (cmdCount vm') then 
         vmRun vm'
     else 

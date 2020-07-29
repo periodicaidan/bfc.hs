@@ -1,5 +1,13 @@
 {-# LANGUAGE DeriveFunctor #-}
-module Parser where
+module Parser
+( Token (..)
+, TokenStream 
+, ParseResult 
+, Parser (..)
+, tokenStreamParser
+, tokenParser
+) 
+where
 
 import Control.Applicative
 
@@ -15,6 +23,7 @@ data Token
 
 type TokenStream = [Token]
 
+-- TODO: Make this a result instead
 type ParseResult a = Maybe (String, a)
 
 newtype Parser a = Parser

@@ -5,7 +5,7 @@ module IR
 , nextCmd
 , getCmd
 , interpretTokens
-)
+) 
 where
 
 import qualified Parser as T (Token (..))
@@ -72,6 +72,7 @@ appendCommands src dest =
         (c:cs) -> appendCommands cs (appendCommand c dest)
         [] -> dest
 
+-- ? This function seems a little clunky
 interpretToken :: Int -> Token -> [Command]
 interpretToken cmdPtr t =
     case t of
