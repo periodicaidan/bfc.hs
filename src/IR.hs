@@ -1,4 +1,12 @@
-module IR where
+module IR
+( Command (..)
+, CommandBuffer (..)
+, cmdBufInit
+, nextCmd
+, getCmd
+, interpretTokens
+)
+where
 
 import qualified Parser as T (Token (..))
 import Parser (Token, TokenStream)
@@ -13,10 +21,22 @@ data Command
     deriving (Show, Eq)
 
 data CommandBuffer = CommandBuffer
-    { commandPointer :: Int 
+    { commandPointer :: Int
     , commands :: [Command]
     }
     deriving (Show)
+
+cmdBufInit :: Int -> CommandBuffer
+cmdBufInit start =
+    CommandBuffer start []
+
+nextCmd :: CommandBuffer -> CommandBuffer
+nextCmd (CommandBuffer p cs) =
+    CommandBuffer (p + 1) cs
+
+getCmd :: CommandBuffer -> Command
+getCmd (CommandBuffer p cs) =
+    cs !! p
 
 inc :: Command
 inc = Add 1
@@ -30,28 +50,30 @@ shr = Seek 1
 shl :: Command
 shl = Seek (-1)
 
-appendCommand :: Command -> [Command] -> [Command]
-appendCommand c [] = [c]
-appendCommand c cs =
+appendCommand :: Command -> CommandBuffer -> CommandBuffer
+appendCommand c (CommandBuffer p []) = CommandBuffer p [c]
+appendCommand c (CommandBuffer p cs) =
     let lastCommand = last cs
         rest = init cs
     in
-        case (lastCommand, c) of
-            (Add a, Add b) ->
-                rest ++ [Add (a + b)]
-            (Seek a, Seek b) ->
-                rest ++ [Seek (a + b)]
-            _ ->
-                cs ++ [c]
+        CommandBuffer (p + 1) (
+            case (lastCommand, c) of
+                (Add a, Add b) ->
+                    rest ++ [Add (a + b)]
+                (Seek a, Seek b) ->
+                    rest ++ [Seek (a + b)]
+                _ ->
+                    cs ++ [c]
+        )
 
-appendCommands :: [Command] -> [Command] -> [Command]
-appendCommands src dest = 
-    case src of 
+appendCommands :: [Command] -> CommandBuffer -> CommandBuffer
+appendCommands src dest =
+    case src of
         (c:cs) -> appendCommands cs (appendCommand c dest)
-        [] -> dest 
+        [] -> dest
 
-interpretToken :: Token -> [Command]
-interpretToken t =
+interpretToken :: Int -> Token -> [Command]
+interpretToken cmdPtr t =
     case t of
         T.Plus -> [inc]
         T.Minus -> [dec]
@@ -59,20 +81,23 @@ interpretToken t =
         T.Shl -> [shl]
         T.Read -> [Scan]
         T.Write -> [Print]
-        T.Loop ts -> [Label nth] ++ (ts >>= interpretToken) ++ [Jump nth]
-        where 
-            nth = 1
+        T.Loop ts -> [Label cmdPtr] ++ commands (interpretTokens ts cmdPtr) ++ [Jump cmdPtr]
 
-appendToken :: Token -> [Command] -> [Command]
-appendToken t =
-    appendCommands (interpretToken t)
+appendToken :: Token -> CommandBuffer -> CommandBuffer
+appendToken t cb =
+    appendCommands (interpretToken cmdPtr t) cb
+    where
+        cmdPtr = commandPointer cb
 
-appendTokens :: TokenStream -> [Command] -> [Command]
+appendTokens :: TokenStream -> CommandBuffer -> CommandBuffer
 appendTokens ts cs =
-    case ts of 
+    case ts of
         (t:ts') -> appendTokens ts' (appendToken t cs)
         [] -> cs
 
-interpretTokens :: TokenStream -> [Command]
-interpretTokens ts =
-    appendTokens ts []
+interpretTokens :: TokenStream -> Int -> CommandBuffer
+interpretTokens ts start =
+    CommandBuffer start cmds
+    where
+        cmds =
+            commands (appendTokens ts $ cmdBufInit start)
