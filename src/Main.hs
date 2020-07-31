@@ -2,16 +2,17 @@ module Main where
 
 import System.Environment
 
-import Preprocessor
-import Parser (runParser, tokenStreamParser)
+import Parser (ParseError (..), runParser, tokenStreamParser)
 import IR (interpretTokens)
 import VM (vmInit, vmRun)
 
 main :: IO ()
-main = do 
+main = do
     source <- readFile =<< head <$> getArgs
-    case runParser tokenStreamParser (prepareSource source) of
-        Just ("", tokens) -> 
+    case runParser tokenStreamParser source of
+        Right ("", tokens) ->
             vmRun . vmInit $ interpretTokens tokens 0
-        _ -> 
-            print "Error Parsing Tokens"
+        Right (s, tokens) ->
+            print "Failed to tokenize whole source"
+        Left (ParseError msg) ->
+            print msg
